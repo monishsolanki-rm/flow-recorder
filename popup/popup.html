@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Flow Recorder</title>
+  <link rel="stylesheet" href="popup.css" />
+  <style>
+    .edit-hint {
+      font-size: 12px;
+      color: #666;
+      margin-bottom: 12px;
+      line-height: 1.4;
+    }
+    .edit-cards-container {
+      max-height: 300px;
+      overflow-y: auto;
+      border: 1px solid #e8e8f0;
+      border-radius: 7px;
+      margin-bottom: 12px;
+    }
+    .edit-card {
+      padding: 10px 12px;
+      border-bottom: 1px solid #f0f0f6;
+    }
+    .edit-card:last-child { border-bottom: none; }
+    .edit-card-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+    .edit-card-id {
+      font-size: 11px;
+      font-weight: 600;
+      color: #1a1a2e;
+      flex: 1;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+    }
+    .edit-card-action {
+      font-size: 10px;
+      padding: 2px 7px;
+      border-radius: 10px;
+      font-weight: 600;
+      background: #e0e7ff;
+      color: #4f46e5;
+      white-space: nowrap;
+    }
+    .edit-field {
+      margin-bottom: 6px;
+    }
+    .edit-field:last-child { margin-bottom: 0; }
+    .edit-field label {
+      display: block;
+      font-size: 10px;
+      font-weight: 600;
+      color: #aaa;
+      margin-bottom: 3px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .edit-field input {
+      width: 100%;
+      padding: 5px 8px;
+      border: 1px solid #ddd;
+      border-radius: 5px;
+      font-size: 12px;
+      font-family: inherit;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    .edit-field input:focus { border-color: #4f46e5; }
+    .edit-field input.field-alert {
+      border-color: #e53e3e;
+      background: #fff8f8;
+    }
+    .field-alert-note {
+      font-size: 10px;
+      color: #e53e3e;
+      font-weight: 600;
+      margin-top: 2px;
+      display: block;
+    }
+  </style>
+</head>
+<body>
+  <!-- Section: Idle -->
+  <div id="section-idle" class="section">
+    <div class="header">
+      <div class="logo">
+        <div class="logo-dot"></div>
+        <span class="logo-text">Flow Recorder</span>
+      </div>
+    </div>
+    <div class="hint">
+      <p>Record any user flow on any website and generate a clean YAML test file instantly.</p>
+    </div>
+    <button id="btn-start" class="btn btn-primary btn-full">Start Recording</button>
+  </div>
+
+  <!-- Section: Recording -->
+  <div id="section-recording" class="section hidden">
+    <div class="header">
+      <div class="recording-indicator">
+        <div class="pulse-dot"></div>
+        <span class="recording-label">Recording</span>
+      </div>
+      <span id="step-count" class="step-count">0 steps</span>
+    </div>
+    <div class="preview-box">
+      <div class="preview-label">Recent steps</div>
+      <ul id="preview-list" class="preview-list">
+        <li class="preview-empty">Waiting for interactions...</li>
+      </ul>
+    </div>
+    <div id="segment-badge" style="display:none; background:#6366f1; color:#fff; padding:4px 10px; border-radius:4px; font-size:12px; margin-bottom:6px;"></div>
+    <div id="recording-warning" style="display:none; padding:8px 12px; border-radius:6px; font-size:12px; margin-bottom:6px; line-height:1.4;"></div>
+    <button id="btn-stop-checkpoint" style="display:none" class="btn-secondary">🛑 Stop &amp; Continue Next Phase</button>
+    <button id="btn-stop" class="btn btn-danger btn-full">Stop Recording</button>
+  </div>
+
+  <!-- Section: Review -->
+  <div id="section-review" class="section hidden">
+    <div class="header">
+      <span class="section-title">Review &amp; Generate</span>
+      <span id="review-step-count" class="step-count"></span>
+    </div>
+    <div id="summary-bar" class="summary-bar hidden"></div>
+    <div class="steps-scroll">
+      <ul id="steps-list" class="steps-list"></ul>
+    </div>
+    <div class="form-group">
+      <label for="flow-name">Flow name</label>
+      <input id="flow-name" type="text" placeholder="e.g. User Login Flow" />
+    </div>
+    <button id="btn-continue-recording" style="display:none" class="btn-secondary">➕ Continue Recording Next Phase</button>
+    <div class="form-group">
+      <label for="expected-outcome">Expected outcome</label>
+      <textarea id="expected-outcome" placeholder="e.g. User is redirected to dashboard and sees their profile" rows="3"></textarea>
+    </div>
+    <div class="form-group">
+      <label for="claude-key">Claude API Key</label>
+      <input id="claude-key" type="password" placeholder="sk-ant-... (preferred — higher quality)" />
+      <span class="field-hint">Optional. Uses claude-opus-4-5. Falls back to Groq then Ollama.</span>
+    </div>
+    <div class="form-group">
+      <label for="groq-key">Groq API Key</label>
+      <input id="groq-key" type="password" placeholder="Groq API key (optional — leave empty to use Ollama)" />
+      <span class="field-hint">Optional. If empty, Ollama must be running locally (ollama serve)</span>
+    </div>
+    <div class="form-group">
+      <label for="ollama-url">Ollama URL (optional)</label>
+      <input id="ollama-url" type="text" placeholder="http://127.0.0.1:11434" />
+      <span class="field-hint">Fallback when Groq rate-limits. Leave empty for default.</span>
+    </div>
+    <div class="form-group">
+      <label class="checkbox-label">
+        <input type="checkbox" id="fast-mode" />
+        Fast mode (llama3.2 — quick but lower quality)
+      </label>
+      <span class="field-hint">Default: mistral (higher quality, slower)</span>
+    </div>
+    <div class="btn-row">
+      <button id="btn-rerecord" class="btn btn-secondary">Re-record</button>
+      <button id="btn-generate" class="btn btn-primary">Generate YAML</button>
+    </div>
+  </div>
+
+  <!-- Section: Generating -->
+  <div id="section-generating" class="section hidden">
+    <div class="center-content">
+      <div class="spinner"></div>
+      <p class="generating-text">Generating YAML flow...</p>
+      <p class="generating-sub">This usually takes a few seconds</p>
+    </div>
+  </div>
+
+  <!-- Section: Edit -->
+  <div id="section-edit" class="section hidden">
+    <div class="header">
+      <span class="section-title">Review &amp; Edit Steps</span>
+      <span id="edit-step-count" class="step-count"></span>
+    </div>
+    <p class="edit-hint">Edit selectors and fields before finalizing. Fields in <span style="color:#e53e3e;font-weight:600">red</span> require your attention.</p>
+    <div id="edit-cards-container" class="edit-cards-container"></div>
+    <div class="btn-row">
+      <button id="btn-confirm-edit" class="btn btn-primary btn-full">Confirm &amp; Generate Final YAML</button>
+    </div>
+  </div>
+
+  <!-- Section: Result -->
+  <div id="section-result" class="section hidden">
+    <div class="header">
+      <div class="success-badge">
+        <span class="success-icon">&#10003;</span>
+        <span>YAML Generated</span>
+      </div>
+    </div>
+    <div id="result-summary" class="result-summary hidden"></div>
+    <pre id="yaml-preview" class="yaml-preview"></pre>
+    <div id="warnings-panel" class="warnings-panel hidden"></div>
+    <div class="btn-row">
+      <button id="btn-copy" class="btn btn-secondary">Copy YAML</button>
+      <button id="btn-download" class="btn btn-primary">Download</button>
+    </div>
+    <div id="btn-row-split" class="btn-row hidden">
+      <button id="btn-download-part1" class="btn btn-secondary">Download Part 1</button>
+      <button id="btn-download-part2" class="btn btn-primary">Download Part 2</button>
+    </div>
+    <div class="center-link">
+      <a id="btn-another" href="#">Record another flow</a>
+    </div>
+  </div>
+
+  <!-- Section: Error -->
+  <div id="section-error" class="section hidden">
+    <div class="error-box">
+      <div class="error-icon">&#10005;</div>
+      <p id="error-message" class="error-message">Something went wrong.</p>
+    </div>
+    <button id="btn-try-again" class="btn btn-primary btn-full">Try Again</button>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

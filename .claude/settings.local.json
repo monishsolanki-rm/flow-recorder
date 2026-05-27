@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node --check background.js)",
+      "Bash(node --check popup/popup.js)",
+      "Bash(node /Users/monish.solanki/Desktop/chrome_extension/flow-recorder/popup/popup.js)"
+    ]
+  }
+}
