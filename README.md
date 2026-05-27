@@ -4,10 +4,15 @@ A Chrome extension that records user interactions on any website and generates a
 
 ## Setup
 
-1. Open Chrome and go to `chrome://extensions`
-2. Enable **Developer mode** (toggle in top-right corner)
-3. Click **Load unpacked** and select the `flow-recorder/` folder
-4. The extension icon appears in your toolbar — click it to open the popup
+1. Download the repository to your local machine (either clone it via Git or download and extract the ZIP file).
+
+2. Open Chrome and go to chrome://extensions
+
+3. Enable Developer mode (toggle in top-right corner)
+
+4. Click Load unpacked and select the flow-recorder/ folder from your downloaded files
+
+5. The extension icon appears in your toolbar — click it to open the popup
 
 ## Usage
 
@@ -20,22 +25,6 @@ A Chrome extension that records user interactions on any website and generates a
    - **Groq API key** — saved locally for future use
 5. Click **Generate YAML** — your test flow downloads automatically
 
-## Getting a Groq API Key
-
-1. Go to [console.groq.com](https://console.groq.com)
-2. Sign up for free — no credit card required
-3. Create an API key under **API Keys**
-4. Paste it into the extension (it's saved in your browser, never sent anywhere except Groq)
-
-## Switching to Claude
-
-To use Claude instead of Groq, change only these three things in `popup/popup.js` inside the `callGroq` function:
-
-- **URL**: `https://api.anthropic.com/v1/messages`
-- **Headers**: replace `Authorization: Bearer` with `x-api-key` and add `anthropic-version: 2023-06-01`
-- **Body**: use `{ model: "claude-opus-4-7", max_tokens: 2048, messages: [...] }` and read from `response.content[0].text`
-
-Everything else — the prompt, the UI, the recording logic — stays identical.
 
 ## What gets recorded
 
