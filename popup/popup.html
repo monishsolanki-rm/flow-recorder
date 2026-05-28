@@ -13,16 +13,35 @@
       line-height: 1.4;
     }
     .edit-cards-container {
-      max-height: 300px;
+      max-height: 360px;
       overflow-y: auto;
       border: 1px solid #e8e8f0;
       border-radius: 7px;
       margin-bottom: 12px;
+      background: #fafafd;
     }
     .edit-card {
-      padding: 10px 12px;
+      padding: 10px 12px 10px 8px;
       border-bottom: 1px solid #f0f0f6;
+      background: #fff;
+      position: relative;
+      transition: opacity 0.15s, box-shadow 0.15s;
     }
+    .edit-card.dragging {
+      opacity: 0.4;
+    }
+    .edit-card.drop-above::before,
+    .edit-card.drop-below::after {
+      content: '';
+      position: absolute;
+      left: 8px;
+      right: 8px;
+      height: 2px;
+      background: #4f46e5;
+      border-radius: 2px;
+    }
+    .edit-card.drop-above::before { top: -1px; }
+    .edit-card.drop-below::after { bottom: -1px; }
     .edit-card:last-child { border-bottom: none; }
     .edit-card-header {
       display: flex;
@@ -30,11 +49,42 @@
       gap: 8px;
       margin-bottom: 8px;
     }
-    .edit-card-id {
-      font-size: 11px;
-      font-weight: 600;
-      color: #1a1a2e;
+    .edit-card-drag {
+      cursor: grab;
+      color: #c4c4d0;
+      font-size: 13px;
+      user-select: none;
+      padding: 0 2px;
+      line-height: 1;
+    }
+    .edit-card-drag:hover { color: #4f46e5; }
+    .edit-card-drag:active { cursor: grabbing; }
+    .edit-card-num {
+      font-size: 10px;
+      font-weight: 700;
+      color: #888;
+      min-width: 18px;
+      text-align: center;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+    }
+    .edit-card-intent {
       flex: 1;
+      font-size: 12px;
+      color: #1a1a2e;
+      font-weight: 500;
+      line-height: 1.3;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .edit-card-intent.placeholder {
+      color: #aaa;
+      font-style: italic;
+      font-weight: 400;
+    }
+    .edit-card-id {
+      font-size: 10px;
+      color: #888;
       font-family: 'SF Mono', 'Fira Code', monospace;
     }
     .edit-card-action {
@@ -45,6 +95,30 @@
       background: #e0e7ff;
       color: #4f46e5;
       white-space: nowrap;
+      text-transform: lowercase;
+    }
+    .edit-card-action[data-action="navigate"]       { background:#dbeafe; color:#1e40af; }
+    .edit-card-action[data-action="click"]          { background:#ede9fe; color:#6d28d9; }
+    .edit-card-action[data-action="type"]           { background:#d1fae5; color:#065f46; }
+    .edit-card-action[data-action="select"]         { background:#d1fae5; color:#065f46; }
+    .edit-card-action[data-action="check"]          { background:#d1fae5; color:#065f46; }
+    .edit-card-action[data-action="assert"]         { background:#fef3c7; color:#92400e; }
+    .edit-card-action[data-action="waitForSelector"]{ background:#f3f4f6; color:#374151; }
+    .edit-card-action[data-action="evaluate"]       { background:#f3f4f6; color:#374151; }
+    .edit-card-delete {
+      background: none;
+      border: none;
+      color: #c4c4d0;
+      font-size: 16px;
+      line-height: 1;
+      padding: 2px 6px;
+      cursor: pointer;
+      border-radius: 4px;
+      transition: color 0.15s, background 0.15s;
+    }
+    .edit-card-delete:hover {
+      color: #e53e3e;
+      background: #fef2f2;
     }
     .edit-field {
       margin-bottom: 6px;
@@ -68,6 +142,7 @@
       font-family: inherit;
       outline: none;
       transition: border-color 0.15s;
+      box-sizing: border-box;
     }
     .edit-field input:focus { border-color: #4f46e5; }
     .edit-field input.field-alert {
@@ -80,6 +155,68 @@
       font-weight: 600;
       margin-top: 2px;
       display: block;
+    }
+    .edit-add-row {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 4px 0;
+      background: #fafafd;
+      position: relative;
+    }
+    .edit-add-row::before {
+      content: '';
+      position: absolute;
+      left: 12px;
+      right: 12px;
+      top: 50%;
+      height: 1px;
+      background: transparent;
+    }
+    .edit-add-row:hover::before { background: #e0e7ff; }
+    .edit-add-btn {
+      position: relative;
+      background: #fff;
+      border: 1px dashed #d4d4dc;
+      color: #888;
+      font-size: 11px;
+      font-weight: 500;
+      padding: 3px 10px;
+      border-radius: 12px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .edit-add-btn:hover {
+      border-color: #4f46e5;
+      color: #4f46e5;
+      background: #fff;
+    }
+    .edit-add-picker {
+      position: relative;
+      background: #fff;
+      border: 1px solid #4f46e5;
+      border-radius: 6px;
+      padding: 4px;
+      display: flex;
+      gap: 4px;
+      flex-wrap: wrap;
+      justify-content: center;
+      box-shadow: 0 2px 8px rgba(79,70,229,0.15);
+    }
+    .edit-add-picker button {
+      background: #f5f5fa;
+      border: none;
+      padding: 4px 8px;
+      border-radius: 10px;
+      font-size: 10px;
+      font-weight: 600;
+      cursor: pointer;
+      color: #4f46e5;
+    }
+    .edit-add-picker button:hover { background: #e0e7ff; }
+    .edit-add-picker .edit-add-cancel {
+      background: transparent;
+      color: #888;
     }
   </style>
 </head>
