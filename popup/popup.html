@@ -107,15 +107,16 @@
       </div>
       <span id="step-count" class="step-count">0 steps</span>
     </div>
+    <div id="phase-badge" style="display:none;
+      background:#6366f1;color:#fff;padding:4px 10px;
+      border-radius:4px;font-size:12px;margin-bottom:8px">
+    </div>
     <div class="preview-box">
       <div class="preview-label">Recent steps</div>
       <ul id="preview-list" class="preview-list">
         <li class="preview-empty">Waiting for interactions...</li>
       </ul>
     </div>
-    <div id="segment-badge" style="display:none; background:#6366f1; color:#fff; padding:4px 10px; border-radius:4px; font-size:12px; margin-bottom:6px;"></div>
-    <div id="recording-warning" style="display:none; padding:8px 12px; border-radius:6px; font-size:12px; margin-bottom:6px; line-height:1.4;"></div>
-    <button id="btn-stop-checkpoint" style="display:none" class="btn-secondary">🛑 Stop &amp; Continue Next Phase</button>
     <button id="btn-stop" class="btn btn-danger btn-full">Stop Recording</button>
   </div>
 
@@ -133,7 +134,6 @@
       <label for="flow-name">Flow name</label>
       <input id="flow-name" type="text" placeholder="e.g. User Login Flow" />
     </div>
-    <button id="btn-continue-recording" style="display:none" class="btn-secondary">➕ Continue Recording Next Phase</button>
     <div class="form-group">
       <label for="expected-outcome">Expected outcome</label>
       <textarea id="expected-outcome" placeholder="e.g. User is redirected to dashboard and sees their profile" rows="3"></textarea>
@@ -207,6 +207,13 @@
       <button id="btn-download-part1" class="btn btn-secondary">Download Part 1</button>
       <button id="btn-download-part2" class="btn btn-primary">Download Part 2</button>
     </div>
+    <hr style="border:none;border-top:1px solid var(--border);margin:12px 0">
+    <button id="btn-record-next-phase" class="btn-secondary" style="width:100%">
+      ➕ Record Next Phase
+    </button>
+    <p style="font-size:11px;color:var(--text-muted);text-align:center;margin-top:4px">
+      Adds more steps to this flow
+    </p>
     <div class="center-link">
       <a id="btn-another" href="#">Record another flow</a>
     </div>

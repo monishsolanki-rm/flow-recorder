@@ -1,8 +1,3 @@
-// ── THRESHOLDS ──
-const WARN_CAUTION  = 15
-const WARN_WARNING  = 20
-const WARN_CRITICAL = 25
-
 const $ = id => document.getElementById(id)
 
 const sections = ['idle', 'recording', 'review', 'generating', 'edit', 'result', 'error']
@@ -22,9 +17,7 @@ let currentFlowName = ''
 let currentSessionState = null
 let isSplitYaml = false
 let editParsedSteps = []
-let isMultiSegment = false
-let autoCheckpointFired = false
-let currentPhaseCount = 0
+let phaseNumber = 1
 
 // ── Provider config ────────────────────────────────────────────────────────────
 
@@ -185,47 +178,11 @@ function renderStepsList(recording) {
   `).join('')
 }
 
-function updateRecordingWarning(count, segmentIndex) {
-  const banner = $('recording-warning')
-  const stopBtn = $('btn-stop-recording')
-  const checkpointBtn = $('btn-stop-checkpoint')
-  if (!banner) return
-  if (count < WARN_CAUTION) {
-    banner.style.display = 'none'
-    return
-  }
-  banner.style.display = 'block'
-  if (count >= WARN_CRITICAL) {
-    banner.style.background = '#fee2e2'
-    banner.style.color = '#991b1b'
-    banner.innerHTML = '🛑 ' + count + ' steps — too long for reliable AI generation. Recording paused. Click Stop & Continue to proceed.'
-    if (stopBtn) stopBtn.style.display = 'none'
-    if (checkpointBtn) checkpointBtn.style.display = 'block'
-    if (!autoCheckpointFired) {
-      autoCheckpointFired = true
-      chrome.runtime.sendMessage({ type: 'FORCE_CHECKPOINT' })
-    }
-  } else if (count >= WARN_WARNING) {
-    banner.style.background = '#ffedd5'
-    banner.style.color = '#9a3412'
-    banner.innerHTML = '⚠️ ' + count + ' steps — getting long. Stop here and use Continue Recording for the next phase.'
-    if (checkpointBtn) checkpointBtn.style.display = 'block'
-  } else {
-    banner.style.background = '#fefce8'
-    banner.style.color = '#854d0e'
-    banner.innerHTML = '⚠️ ' + count + ' steps recorded — consider wrapping up this phase soon.'
-    if (checkpointBtn) checkpointBtn.style.display = 'none'
-  }
-}
-
 function startPoll() {
   stopPoll()
   pollTimer = setInterval(() => {
     chrome.runtime.sendMessage({ type: 'GET_RECORDING' }, res => {
-      if (res) {
-        updatePreview(res.recording || [])
-        updateRecordingWarning((res.recording || []).length, 0)
-      }
+      if (res) updatePreview(res.recording || [])
     })
   }, 800)
 }
@@ -325,8 +282,7 @@ function deduplicateRecording(recording) {
     let event = noFocus[i]  // let — may be replaced with url-cleaned copy below
     const prev = result.length > 0 ? result[result.length - 1] : null
 
-    // ── Type deduplication ────────────────────────────────────────────────────
-    // Keep only the last type event for the same field
+    // ── Type deduplication ─────────────────────────────────────────────────
     if (event.action === 'type') {
       const sel = event.element?.id || event.element?.testid ||
                   event.element?.name || event.element?.placeholder
@@ -338,8 +294,7 @@ function deduplicateRecording(recording) {
       if (laterType) continue
     }
 
-    // ── Click before type/select/check ───────────────────────────────────────
-    // Remove a click if the same element has type, select, or check within next 3 steps
+    // ── Click before type/select/check ────────────────────────────────────
     if (event.action === 'click') {
       const upcoming = noFocus.slice(i + 1, i + 4)
       const hasInputOnSame = upcoming.some(e =>
@@ -349,23 +304,22 @@ function deduplicateRecording(recording) {
       if (hasInputOnSame) continue
     }
 
-    // ── Click after type on same element (within 1s) ──────────────────────────
+    // ── Click after type on same element (within 1s) ──────────────────────
     if (event.action === 'click' && prev && prev.action === 'type' &&
         event.timestamp - prev.timestamp < 1000 &&
         isSameElement(event.element, prev.element)) continue
 
-    // ── Click after select on same element ────────────────────────────────────
+    // ── Click after select on same element ───────────────────────────────
     if (event.action === 'click' && prev && prev.action === 'select' &&
         isSameElement(event.element, prev.element)) continue
 
-    // ── Consecutive scrolls in same direction — keep only the last ────────────
+    // ── Consecutive scrolls in same direction — keep only the last ────────
     if (event.action === 'scroll' && prev && prev.action === 'scroll' &&
         prev.direction === event.direction) {
       result.pop()
     }
 
-    // ── Submit after click with network activity on same form (within 3 steps) ─
-    // The click already captured the network call — the submit is redundant
+    // ── Submit after click with network activity on same form ─────────────
     if (event.action === 'submit') {
       const lookback = result.slice(-3)
       const clickWithNetwork = lookback.some(p =>
@@ -376,12 +330,12 @@ function deduplicateRecording(recording) {
       if (clickWithNetwork) continue
     }
 
-    // ── Submit immediately after click on same form within 500ms ─────────────
+    // ── Submit immediately after click on same form within 500ms ──────────
     if (event.action === 'submit' && prev && prev.action === 'click' &&
         event.timestamp - prev.timestamp < 500 &&
         isSameElement(event.element, prev.element)) continue
 
-    // ── Submit within 2 steps of a click on the same form ────────────────────
+    // ── Submit within 2 steps of a click on the same form ─────────────────
     if (event.action === 'submit') {
       const recentClick = result.slice(-2).some(p =>
         p.action === 'click' && isSameElement(event.element, p.element)
@@ -389,7 +343,7 @@ function deduplicateRecording(recording) {
       if (recentClick) continue
     }
 
-    // ── Navigate after click (click implies the navigation) ───────────────────
+    // ── Navigate after click (click implies the navigation) ───────────────
     if (event.action === 'navigate' && prev) {
       if (prev.action === 'click' && event.timestamp - prev.timestamp < 3000) continue
       if (event.url === prev.url) continue
@@ -403,10 +357,7 @@ function deduplicateRecording(recording) {
     result.push(event)
   }
 
-  // Pass 2: collapse "scroll + click(s) + check/uncheck on same element" sequences.
-  // Pattern: within 8 steps before a check/uncheck, there is at least one scroll
-  // and at least one click on the same element — collapse all into one check
-  // with scroll_into_view: true.
+  // Pass 2: collapse "scroll + click(s) + check/uncheck on same element" sequences
   const collapsed = []
   for (let i = 0; i < result.length; i++) {
     const ev = result[i]
@@ -418,7 +369,6 @@ function deduplicateRecording(recording) {
         e.action === 'click' && isSameElement(e.element, ev.element)
       )
       if (hasScroll && hasClickOnSame) {
-        // Keep everything before the window, then drop scroll + clicks-on-same from window
         const before = collapsed.slice(0, windowStart)
         const filtered = window.filter(e =>
           e.action !== 'scroll' && !(e.action === 'click' && isSameElement(e.element, ev.element))
@@ -431,8 +381,7 @@ function deduplicateRecording(recording) {
     collapsed.push(ev)
   }
 
-  // Pass 3: keep only the last scroll before each significant action.
-  // If a later scroll precedes the same significant action, drop this one.
+  // Pass 3: keep only the last scroll before each significant action
   const SIGNIFICANT = new Set(['click', 'dblclick', 'type', 'submit', 'select', 'check', 'uncheck', 'keypress', 'file_upload'])
   const scrollCleaned = []
   for (let i = 0; i < collapsed.length; i++) {
@@ -525,7 +474,7 @@ function stripEmptyFields(obj) {
   return obj
 }
 
-// ── Groq prompt builder — text only, no screenshots ──────────────────────────
+// ── Prompt builder ────────────────────────────────────────────────────────────
 
 function describeAction(event, i) {
   const el = event.element
@@ -975,34 +924,34 @@ async function callLLMForSegment(events, index) {
   }
 }
 
+// ── mergeYamlSegments ─────────────────────────────────────────────────────────
+// Merges two or more YAML blocks into one, de-duplicating step IDs by appending
+// a phase suffix (-p2, -p3, …) when the same id appears in multiple blocks.
+
 function mergeYamlSegments(yamlBlocks) {
   if (yamlBlocks.length === 1) return yamlBlocks[0]
-  const metaMatch = yamlBlocks[0].match(
-    /^(metadata:[\s\S]*?)(?=\nsteps:)/m)
-  const meta = metaMatch ? metaMatch[1] : ''
-  const allSteps = []
+  const meta = yamlBlocks[0].split('steps:')[0]
   const seenIds = {}
+  const allSteps = []
   yamlBlocks.forEach((block, bi) => {
-    const stepsMatch = block.match(/^steps:([\s\S]*)$/m)
-    if (!stepsMatch) return
-    const stepsText = stepsMatch[1]
-    const stepBlocks = stepsText.split(/\n(?=  - id:)/)
-    stepBlocks.forEach(step => {
+    const parts = block.split('steps:')
+    if (!parts[1]) return
+    parts[1].split(/\n(?=  - id:)/).forEach(step => {
       if (!step.trim()) return
-      const idMatch = step.match(/- id:\s*(.+)/)
-      if (!idMatch) { allSteps.push(step); return }
-      let id = idMatch[1].trim()
-      if (seenIds[id]) {
-        const suffix = '-p' + (bi + 1)
-        step = step.replace('- id: ' + id,
-          '- id: ' + id + suffix)
-        id = id + suffix
+      const m = step.match(/- id:\s*(.+)/)
+      if (m) {
+        let id = m[1].trim()
+        if (seenIds[id]) {
+          step = step.replace(
+            '- id: ' + id,
+            '- id: ' + id + '-p' + (bi + 1))
+        }
+        seenIds[id] = true
       }
-      seenIds[id] = true
       allSteps.push(step)
     })
   })
-  return meta + '\n\nsteps:\n' + allSteps.join('\n')
+  return meta + 'steps:\n' + allSteps.join('\n')
 }
 
 // ── YAML result warnings panel ────────────────────────────────────────────────
@@ -1103,7 +1052,6 @@ function parseYamlSteps(yaml) {
   if (stepsIdx === -1) return steps
 
   const afterSteps = yaml.slice(stepsIdx + stepsMarker.length)
-  // Split on step boundaries — lookahead keeps the delimiter in each part
   const parts = afterSteps.split(/(?=\n  - id:)/)
 
   for (let i = 0; i < parts.length; i++) {
@@ -1222,26 +1170,6 @@ function reconstructYamlFromEdits(originalYaml, steps) {
 }
 
 async function handleStopResponse(res) {
-  const { segments: storedSegments } = await
-    chrome.storage.session.get('segments')
-  if (storedSegments && storedSegments.length > 1) {
-    showSection('generating')
-    const yamlBlocks = []
-    for (let i = 0; i < storedSegments.length; i++) {
-      const genMsg = $('generating-message') ||
-        $('section-generating')
-      if (genMsg) genMsg.textContent =
-        'Processing phase ' + (i+1) +
-        ' of ' + storedSegments.length + '…'
-      yamlBlocks.push(
-        await callLLMForSegment(storedSegments[i], i))
-    }
-    generatedYaml = mergeYamlSegments(yamlBlocks)
-    renderEditSection(generatedYaml)
-    showSection('edit')
-    return
-  }
-  // existing single-flow logic continues below unchanged
   currentRecording = res && res.recording || []
   currentNetworkLog = res && res.networkLog || []
   currentConsoleErrors = res && res.consoleErrors || []
@@ -1249,11 +1177,6 @@ async function handleStopResponse(res) {
   if (res && res.startUrl) startUrl = res.startUrl
   renderStepsList(currentRecording)
   showSection('review')
-  chrome.storage.session.get('segments', ({ segments }) => {
-    const btn = $('btn-continue-recording')
-    if (btn) btn.style.display =
-      (segments && segments.length > 0) ? 'block' : 'none'
-  })
 }
 
 // ── Init ──────────────────────────────────────────────────────────────────────
@@ -1280,12 +1203,16 @@ async function handleStopResponse(res) {
 // ── Button handlers ───────────────────────────────────────────────────────────
 
 $('btn-start').addEventListener('click', async () => {
+  phaseNumber = 1
+  chrome.storage.session.remove('previousYaml')
   const tabs = await chrome.tabs.query({ active: true, currentWindow: true })
   startUrl = tabs[0] && tabs[0].url || ''
   await chrome.runtime.sendMessage({ type: 'START_RECORDING' })
   showSection('recording')
   $('step-count').textContent = '0 steps'
   $('preview-list').innerHTML = '<li class="preview-empty">Waiting for interactions...</li>'
+  const badge = $('phase-badge')
+  if (badge) badge.style.display = 'none'
   startPoll()
 })
 
@@ -1297,43 +1224,17 @@ $('btn-stop').addEventListener('click', async () => {
   await handleStopResponse(res)
 })
 
-$('btn-stop-checkpoint').addEventListener('click', async () => {
-  if (!autoCheckpointFired) {
-    await chrome.runtime.sendMessage({ type: 'FORCE_CHECKPOINT' })
-  }
-  isMultiSegment = true
-  chrome.runtime.sendMessage({ type: 'STOP_RECORDING' },
-    handleStopResponse)
-})
-
-$('btn-continue-recording').addEventListener('click', async () => {
-  autoCheckpointFired = false
-  const badge = $('segment-badge')
-  const { currentSegmentIndex } = await
-    chrome.storage.session.get('currentSegmentIndex')
-  if (badge) {
-    badge.textContent = 'Phase ' +
-      ((currentSegmentIndex || 0) + 1) +
-      ' — recording continuation'
-    badge.style.display = 'block'
-  }
-  const warning = $('recording-warning')
-  if (warning) warning.style.display = 'none'
-  const stopBtn = $('btn-stop-recording')
-  if (stopBtn) stopBtn.style.display = 'block'
-  const checkpointBtn = $('btn-stop-checkpoint')
-  if (checkpointBtn) checkpointBtn.style.display = 'none'
-  chrome.runtime.sendMessage({ type: 'RESUME_RECORDING' })
-  showSection('recording')
-})
-
 $('btn-rerecord').addEventListener('click', async () => {
+  phaseNumber = 1
+  chrome.storage.session.remove('previousYaml')
   await chrome.runtime.sendMessage({ type: 'CLEAR_RECORDING' })
   const tabs = await chrome.tabs.query({ active: true, currentWindow: true })
   startUrl = tabs[0] && tabs[0].url || ''
   await chrome.runtime.sendMessage({ type: 'START_RECORDING' })
   $('step-count').textContent = '0 steps'
   $('preview-list').innerHTML = '<li class="preview-empty">Waiting for interactions...</li>'
+  const badge = $('phase-badge')
+  if (badge) badge.style.display = 'none'
   showSection('recording')
   startPoll()
 })
@@ -1361,9 +1262,20 @@ $('btn-generate').addEventListener('click', async () => {
       currentRecording, currentNetworkLog, currentConsoleErrors,
       startUrl, currentSessionState, fastMode
     )
-    generatedYaml = result.yaml1
+    let newYaml = result.yaml1
     generatedYaml2 = result.yaml2 || ''
     isSplitYaml = result.isSplit
+
+    // ── Phase merge check ───────────────────────────────────────────────────
+    // If a previous phase's YAML was saved, merge it with the new YAML now,
+    // before showing the edit cards to the user.
+    const { previousYaml } = await chrome.storage.session.get('previousYaml')
+    if (previousYaml) {
+      newYaml = mergeYamlSegments([previousYaml, newYaml])
+      await chrome.storage.session.remove('previousYaml')
+    }
+
+    generatedYaml = newYaml
     renderEditSection(generatedYaml)
     showSection('edit')
   } catch (err) {
@@ -1373,7 +1285,6 @@ $('btn-generate').addEventListener('click', async () => {
 })
 
 $('btn-confirm-edit').addEventListener('click', () => {
-  // Collect edited values from all card inputs
   const container = $('edit-cards-container')
   container.querySelectorAll('input[data-field]').forEach(input => {
     const idx = parseInt(input.dataset.idx)
@@ -1437,8 +1348,38 @@ $('btn-download-part2').addEventListener('click', () => {
   URL.revokeObjectURL(url)
 })
 
+// ── Record Next Phase ─────────────────────────────────────────────────────────
+// Saves the current YAML, increments the phase counter, resets the recorder,
+// and transitions back to recording for the next phase.
+
+$('btn-record-next-phase').addEventListener('click', async () => {
+  // Save current YAML so it can be merged after the next phase generates
+  await chrome.storage.session.set({ previousYaml: generatedYaml })
+
+  phaseNumber++
+
+  // Show phase badge in the recording section
+  const badge = $('phase-badge')
+  if (badge) {
+    badge.textContent = 'Phase ' + phaseNumber + ' — will merge with previous flow'
+    badge.style.display = 'block'
+  }
+
+  // Reset recording state in background (clears segments, starts fresh)
+  await chrome.runtime.sendMessage({ type: 'START_RECORDING' })
+
+  // Reset recording UI
+  $('step-count').textContent = '0 steps'
+  $('preview-list').innerHTML = '<li class="preview-empty">Waiting for interactions...</li>'
+
+  showSection('recording')
+  startPoll()
+})
+
 $('btn-another').addEventListener('click', async e => {
   e.preventDefault()
+  phaseNumber = 1
+  chrome.storage.session.remove('previousYaml')
   await chrome.runtime.sendMessage({ type: 'CLEAR_RECORDING' })
   currentRecording = []
   currentNetworkLog = []
