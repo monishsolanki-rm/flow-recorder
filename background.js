@@ -907,9 +907,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
     switch (message.type) {
       case 'START_RECORDING': {
+        // Reset segments state so each phase records clean
         segments = []
         currentSegmentIndex = 0
-        chrome.storage.session.set({ segments: [], currentSegmentIndex: 0 })
+        chrome.storage.session.set({
+          segments: [],
+          currentSegmentIndex: 0
+        })
         const tabs = await chrome.tabs.query({ active: true, currentWindow: true })
         const tab = tabs[0]
         if (!tab) { sendResponse({ success: false, error: 'No active tab' }); return }
